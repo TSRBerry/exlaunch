@@ -104,17 +104,19 @@ export INCLUDE	:=	$(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
 
 export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 
-ifeq ($(strip $(CONFIG_JSON)),)
-	jsons := $(wildcard *.json)
-	ifneq (,$(findstring $(TARGET).json,$(jsons)))
-		export APP_JSON := $(TOPDIR)/$(TARGET).json
-	else
-		ifneq (,$(findstring config.json,$(jsons)))
-			export APP_JSON := $(TOPDIR)/config.json
+ifeq ($(strip $(APP_JSON)),)
+	ifeq ($(strip $(CONFIG_JSON)),)
+		jsons := $(wildcard *.json)
+		ifneq (,$(findstring $(TARGET).json,$(jsons)))
+			export APP_JSON := $(TOPDIR)/$(TARGET).json
+		else
+			ifneq (,$(findstring config.json,$(jsons)))
+				export APP_JSON := $(TOPDIR)/config.json
+			endif
 		endif
+	else
+		export APP_JSON := $(TOPDIR)/$(CONFIG_JSON)
 	endif
-else
-	export APP_JSON := $(TOPDIR)/$(CONFIG_JSON)
 endif
 
 .PHONY: $(BUILD) clean all
@@ -135,7 +137,7 @@ clean:
 
 #---------------------------------------------------------------------------------
 else
-.PHONY:	all 
+.PHONY:	all
 
 DEPENDS	:=	$(OFILES:.o=.d)
 

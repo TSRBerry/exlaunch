@@ -12,6 +12,7 @@ include $(PWD)/config.mk
 # Define common variables.
 NAME := $(shell basename $(PWD))
 OUT := $(PWD)/deploy
+APP_JSON := $(NPDM_JSON_PATH)/$(NPDM_JSON)
 SD_OUT := atmosphere/contents/$(PROGRAM_ID)/exefs
 
 
