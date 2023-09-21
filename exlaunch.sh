@@ -3,7 +3,7 @@
 # User configuration has moved to misc/mk/config.mk.
 
 # Make arguments.
-MAKE_ARGS="-j8 V=1"
+MAKE_ARGS="-j$(($(nproc) - 2)) V=1"
 
 # Determine the make verb from the user action.
 if [ "$1" == "build" ]; then
