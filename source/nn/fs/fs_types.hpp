@@ -38,7 +38,7 @@ namespace nn::fs {
         u32 field_304;
         long m_FileSize;
     };
-    
+
     /* Mode for opening files. */
     enum OpenMode {
         OpenMode_Read   = BIT(0),
@@ -58,6 +58,7 @@ namespace nn::fs {
     };
 
     enum WriteOptionFlag {
+        WriteOptionFlag_None = (0 << 0),
         WriteOptionFlag_Flush = 1 << 0,
     };
 
