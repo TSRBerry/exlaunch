@@ -1,3 +1,4 @@
+#include "logging.hpp"
 #include "lib.hpp"
 
 /* Define hook StubCopyright. Trampoline indicates the original function should be kept. */
@@ -20,6 +21,10 @@ namespace nn::oe {
 };
 
 extern "C" void exl_main(void* x0, void* x1) {
+    // Init logging
+    R_ABORT_UNLESS(exl::log::Initialize(false, true));
+    exl::log::DebugLog("Initializing exlaunch...\n");
+
     /* Setup hooking enviroment. */
     exl::hook::Initialize();
 
@@ -34,9 +39,12 @@ extern "C" void exl_main(void* x0, void* x1) {
     For sysmodules/applets, you have to call the entrypoint when ready
     exl::hook::CallTargetEntrypoint(x0, x1);
     */
+
+    exl::log::DebugLog("Initialization done!\n");
 }
 
 extern "C" NORETURN void exl_exception_entry() {
+    exl::log::DebugLog("An exlaunch exception occurred.\n");
     /* TODO: exception handling */
     EXL_ABORT(0x420);
 }

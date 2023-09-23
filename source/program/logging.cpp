@@ -16,11 +16,13 @@ namespace exl::log
         s64 LogOffset;
 
         bool initialized = false;
+        bool log_to_kernel = false;
+        bool log_to_file = false;
 
         nn::os::MutexType g_log_lock;
     }
 
-    Result Initialize()
+    Result Initialize(bool can_log_to_kernel, bool can_log_to_file)
     {
         if (initialized)
         {
@@ -29,23 +31,30 @@ namespace exl::log
 
         nn::os::InitializeMutex(&g_log_lock, false, 1);
 
-        // Open log file if it exists otherwise create it
-        Result rc = nn::fs::OpenFile(&LogFile, LogFilePath, nn::fs::OpenMode_Write | nn::fs::OpenMode_Append);
-        if (R_FAILED(rc))
-        {
-            R_TRY(nn::fs::CreateFile(LogFilePath, 0));
-            R_TRY(nn::fs::OpenFile(&LogFile, LogFilePath, nn::fs::OpenMode_Write | nn::fs::OpenMode_Append));
+        log_to_kernel = can_log_to_kernel;
+        log_to_file = can_log_to_file;
+
+        if (log_to_file) {
+            R_ABORT_UNLESS(nn::fs::MountSdCardForDebug("sdmc"));
+
+            // Open log file if it exists otherwise create it
+            Result rc = nn::fs::OpenFile(&LogFile, LogFilePath, nn::fs::OpenMode_Write | nn::fs::OpenMode_Append);
+            if (R_FAILED(rc))
+            {
+                R_TRY(nn::fs::CreateFile(LogFilePath, 0));
+                R_TRY(nn::fs::OpenFile(&LogFile, LogFilePath, nn::fs::OpenMode_Write | nn::fs::OpenMode_Append));
+            }
+
+            // Get file write offset
+            R_TRY(nn::fs::GetFileSize(&LogOffset, LogFile));
+
+            char buff[0x100];
+            int len = ams::util::TSNPrintf(buff, sizeof(buff), "======================== LOG STARTED ========================\n");
+            R_ABORT_UNLESS(nn::fs::WriteFile(LogFile, LogOffset, buff, len, nn::fs::WriteOption::CreateOption(nn::fs::WriteOptionFlag_Flush)));
+            LogOffset += len;
+
+            nn::fs::CloseFile(LogFile);
         }
-
-        // Get file write offset
-        R_TRY(nn::fs::GetFileSize(&LogOffset, LogFile));
-
-        char buff[0x100];
-        int len = ams::util::TSNPrintf(buff, sizeof(buff), "======================== LOG STARTED ========================\n");
-        R_ABORT_UNLESS(nn::fs::WriteFile(LogFile, LogOffset, buff, len, nn::fs::WriteOption::CreateOption(nn::fs::WriteOptionFlag_Flush)));
-        LogOffset += len;
-
-        nn::fs::CloseFile(LogFile);
 
         initialized = true;
 
@@ -54,8 +63,16 @@ namespace exl::log
 
     void Finalize()
     {
-        nn::fs::FlushFile(LogFile);
-        nn::fs::CloseFile(LogFile);
+        if (!initialized)
+        {
+            return;
+        }
+
+        if (log_to_file)
+        {
+            nn::fs::FlushFile(LogFile);
+            nn::fs::CloseFile(LogFile);
+        }
 
         nn::os::FinalizeMutex(&g_log_lock);
 
@@ -64,9 +81,14 @@ namespace exl::log
 
     void DebugLogImpl(const char *fmt, std::va_list args)
     {
+        if (!initialized)
+        {
+            return;
+        }
+
         BACKUP_TLS();
 
-        if (initialized)
+        if (log_to_file)
         {
             R_ABORT_UNLESS(nn::fs::OpenFile(&LogFile, LogFilePath, nn::fs::OpenMode_Write | nn::fs::OpenMode_Append));
         }
@@ -83,8 +105,12 @@ namespace exl::log
                                    nn::os::GetThreadPriority(thread) + 28,
                                    nn::os::GetThreadCurrentPriority(thread) + 28);
 
-        svcOutputDebugString(buff, len);
-        if (initialized)
+        if (log_to_kernel)
+        {
+            svcOutputDebugString(buff, len);
+        }
+
+        if (log_to_file)
         {
             R_ABORT_UNLESS(nn::fs::WriteFile(LogFile, LogOffset, buff, len, nn::fs::WriteOption::CreateOption(nn::fs::WriteOptionFlag_None)));
             LogOffset += len;
@@ -92,8 +118,13 @@ namespace exl::log
 
         // len = std::vsnprintf(buff, sizeof(buff), fmt, args);
         len = ams::util::TVSNPrintf(buff, sizeof(buff), fmt, args);
-        svcOutputDebugString(buff, len);
-        if (initialized)
+
+        if (log_to_kernel)
+        {
+            svcOutputDebugString(buff, len);
+        }
+
+        if (log_to_file)
         {
             R_ABORT_UNLESS(nn::fs::WriteFile(LogFile, LogOffset, buff, len, nn::fs::WriteOption::CreateOption(nn::fs::WriteOptionFlag_Flush)));
             LogOffset += len;
@@ -106,6 +137,11 @@ namespace exl::log
 
     void DebugLog(const char *fmt, ...)
     {
+        if (!initialized)
+        {
+            return;
+        }
+
         nn::os::LockMutex(&g_log_lock);
 
         std::va_list args;
@@ -128,7 +164,10 @@ namespace exl::log
         size_t buff_size = 4 * size + 1;
         std::unique_ptr<char[]> buff(new char[buff_size]);
 
-        R_ABORT_UNLESS(nn::fs::OpenFile(&LogFile, LogFilePath, nn::fs::OpenMode_Write | nn::fs::OpenMode_Append));
+        if (log_to_file)
+        {
+            R_ABORT_UNLESS(nn::fs::OpenFile(&LogFile, LogFilePath, nn::fs::OpenMode_Write | nn::fs::OpenMode_Append));
+        }
 
         int len = 0;
         for (size_t i = 0; i < size; ++i)
@@ -144,10 +183,19 @@ namespace exl::log
         }
         len += ams::util::TSNPrintf(buff.get() + len, buff_size - len, "\n");
 
-        R_ABORT_UNLESS(nn::fs::WriteFile(LogFile, LogOffset, buff.get(), len, nn::fs::WriteOption::CreateOption(nn::fs::WriteOptionFlag_Flush)));
-        LogOffset += len;
+        if (log_to_kernel)
+        {
+            svcOutputDebugString(buff.get(), len);
+        }
 
-        nn::fs::CloseFile(LogFile);
+        if (log_to_file)
+        {
+            R_ABORT_UNLESS(nn::fs::WriteFile(LogFile, LogOffset, buff.get(), len, nn::fs::WriteOption::CreateOption(nn::fs::WriteOptionFlag_Flush)));
+            LogOffset += len;
+
+            nn::fs::CloseFile(LogFile);
+        }
+
         RESTORE_TLS();
     }
 

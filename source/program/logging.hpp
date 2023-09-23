@@ -6,7 +6,7 @@
 
 namespace exl::log
 {
-    Result Initialize();
+    Result Initialize(bool can_log_to_kernel, bool can_log_to_file);
     void Finalize();
 
     void DebugLog(const char *fmt, ...);
