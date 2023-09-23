@@ -19,6 +19,7 @@
 #include <cstring>
 #include <algorithm>
 #include <atomic>
+#include <cstdio>
 
 namespace exl::diag {
 
@@ -31,9 +32,15 @@ namespace exl::diag {
         if(!recursing && util::IsSocErista()) {
             /* Reboot to abort payload.*/
             AbortToPayload(ctx);
-        } else 
+        } else
         #endif
         {
+            char message[50];
+            int n = sprintf(message, "Abort was called - Result: %#x\n", ctx.m_Result);
+            svcOutputDebugString(message, n);
+
+            svcBreak(ctx.m_Result, 0, 0);
+
             /* We have no capability of chainloading payloads on mariko. */
             /* Don't have a great solution for this at the moment, just data abort. */
             /* TODO: maybe write to a file? custom fatal program? */
@@ -66,5 +73,5 @@ namespace exl::diag {
 };
 
 /* C shim for libnx */
-extern "C" NORETURN void exl_abort(Result r) 
+extern "C" NORETURN void exl_abort(Result r)
     ABORT_WITH_VALUE(r)
